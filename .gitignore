@@ -71,3 +71,7 @@ Thumbs.db
 # Test outputs
 test_output/
 *.log
+
+# Temporary files
+*.tmp
+todo_list.txt
