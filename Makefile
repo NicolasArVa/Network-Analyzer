@@ -9,7 +9,6 @@ TESTDIR = tests
 # Find all source files
 SOURCES = $(shell find $(SRCDIR) -name '*.c')
 OBJECTS = $(SOURCES:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
-
 TARGET = network_analyzer
 
 # Test files
@@ -27,7 +26,7 @@ $(TARGET): $(OBJECTS)
 	$(CC) $(OBJECTS) -o $@ -lm
 
 # Object files
-$(BUILDDIR)/%.o: $(SRCDIR)/%.c
+$(BUILDDIR)/%.o: $(SRCDIR)/%.c	
 	@mkdir -p $(dir $@)
 	@echo "Compiling $<..."
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
