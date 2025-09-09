@@ -1,19 +1,25 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include "../../include/core/graph.h"
+#include "../../include/utils/hash_table_utils.h"
 
 # define INITIAL_CAPACITY 4
 
 // Basic graph operations
-Graph* graph_create(GraphType type, size_t initial_capacity) {
-    Graph* graph = malloc(sizeof(Graph));
-    if (!graph) return NULL;
+Graph* graph_create(GraphType type, size_t initial_capacity, float alpha) {
+    Graph *graph = malloc(sizeof(Graph));
+    if (!graph) {
+        fprintf(stderr, "Failed to allocate memory for graph\n");
+        return NULL;
+    }
 
     if (initial_capacity <= 0) initial_capacity = INITIAL_CAPACITY;
 
     graph->type = type;
-    graph->nodes = malloc(initial_capacity * sizeof(Node));
+    graph->nodes = calloc(initial_capacity, sizeof(Node*));
     if (!graph->nodes) {
+        fprintf(stderr, "Failed to allocate memory for nodes array while creating graph\n");
         free(graph);
         return NULL;
     };
@@ -26,62 +32,140 @@ Graph* graph_create(GraphType type, size_t initial_capacity) {
 void graph_destroy(Graph* graph) {
     if (!graph) return;
 
-    // Free each node's edges
-    for (size_t i = 0; i < graph->node_count; i++) {
-        free(graph->nodes[i].neighbors);
+    for (size_t i = 0; i < graph->node_capacity; i++) {
+        Node *current = graph->nodes[i];
+
+        while (current) {
+            Node *next = current->next;
+
+            // Free each node's edges
+            free(current->neighbors);
+            // Free current node
+            free(current);
+
+            current = next;
+        }
     }
+
     free(graph->nodes);
     free(graph);
 }
 
-// Helper: find Node by ID (linear search)
-// TODO: look for a faster method
+// Helper: find Node by ID (Hash table lookup)
 static Node* find_node(Graph* graph, int node_id) {
-    for (size_t i = 0; i < graph->node_count; i++) {
-        if (graph->nodes[i].id == node_id) {
-            return &graph->nodes[i];
-        }
+    unsigned int index = hash(node_id, graph->node_capacity);
+
+    Node *current = graph->nodes[index];
+
+    while (current) {
+        if (current->id == node_id) return current;  // found
+        current = current->next;
     }
-    return NULL;
+    return NULL;  // not found
 }
 
 // Helper: detect if edge exists
 // TODO: look for a faster method
-static bool edge_exists(Node* node, int to) {
-    for (size_t i = 0; i < node->neighbor_count; i++) {
-        if (node->neighbors[i].node_id == to) return true;
+static bool edge_exists(Node* from, int to) {
+    for (size_t i = 0; i < from->neighbor_count; i++) {
+        if (from->neighbors[i].node_id == to) return true;
     }
     return false;
 }
 
-bool graph_add_node(Graph* graph, int node_id, int initial_capacity) {
-    if (!graph) return false;
+// Helper: detect if graph needs to be resized
+static needs_resizing(Graph* graph) {
+    return (graph->node_count >= ALPHA * graph->node_capacity);
+}
 
-    // Check if node already exists
-    if (find_node(graph, node_id)) return false;
+//Helper: resize nodes array
+static bool graph_resize (Graph* graph) {
+        size_t new_capacity = graph->node_capacity * 2; // * 1.5 to reset the table alpha to 0.5
 
-    // Check if nodes arrays needs rezising
-    if (graph->node_count >= graph->node_capacity) {
-        size_t new_capacity = graph->node_capacity * 2;
-        Node* new_nodes = realloc(graph->nodes, new_capacity * sizeof(Node));
-        if (!new_nodes) return false;
+        Node **new_nodes = calloc(new_capacity, sizeof(Node*));
+        if (!new_nodes) {
+            fprintf(stderr, "Failed to resize graph's nodes array\n");
+            return false;
+        }
 
+        for (size_t i = 0; i < graph->node_capacity; i++) {
+            Node *bucket = graph->nodes[i];
+
+            while (bucket) {
+                Node *head = remove_first(&bucket);
+                add_to_hash_table(head, new_capacity, new_nodes);
+            }
+        }
+
+        free(graph->nodes);
         graph->nodes = new_nodes;
         graph->node_capacity = new_capacity;
+
+        printf("Graph successfully resized\n");
+        return true;
+}
+
+// Helper: Create node
+static Node* create_node(int node_id, int node_capacity) {
+    // Allocate memory for new node
+    Node* new_node = malloc(sizeof(Node));
+    if (!new_node) {
+        fprintf(stderr, "Failed to create new node\n");
+        return NULL;
+    }
+
+    new_node->id = node_id;
+    new_node->neighbors = NULL;
+    new_node->neighbor_count = 0;
+    new_node->capacity = node_capacity;
+    new_node->next = NULL;
+
+    new_node->neighbors = calloc(node_capacity, sizeof(EdgeNode)); // Initialize neighbors array
+    if (!new_node->neighbors) {
+        fprintf(stderr, "Failed to initialize new node's neighbors\n");
+        free(new_node);
+        return NULL;
+    }
+
+    return new_node;
+}
+
+bool graph_add_node(Graph* graph, int node_id, int node_capacity) {
+    // Check if graph
+    if (!graph) {
+        fprintf(stderr, "Graph does not exist\n");
+        return false;
+    }
+
+    // Check if node already exists in graph
+    if (find_node(graph, node_id)) {
+        fprintf(stderr, "A node with ID %d already exists\n", node_id);
+        return false;
+    }
+
+    // Check if nodes arrays needs rezising
+    if (needs_resizing(graph)) {
+        // Resize nodes table
+        printf("Graph needs to be resized...\n");
+        if (!graph_resize(graph)) return false;
     }
 
     // Initialize new node
-    if (initial_capacity <= 0) initial_capacity = INITIAL_CAPACITY;
+    if (node_capacity <= 0) node_capacity = INITIAL_CAPACITY;
+    Node* new_node = create_node(node_id, node_capacity);
+    if (!new_node) {
+        fprintf(stderr, "Failed to add new node\n");
+        return false;
+    }
+    
+    if (!add_to_hash_table(new_node, graph->node_capacity, graph->nodes)) {
+        fprintf(stderr, "Failed to add new node to the graph\n");
+        free(new_node->neighbors);
+        free(new_node);
+        return false;
+    }
 
-    Node* new_node = &graph->nodes[graph->node_count++]; // * This increments node_count globally not just in the index
-    new_node->id = node_id;
-    new_node->neighbors = malloc(sizeof(EdgeNode) * initial_capacity);
-    if (!new_node->neighbors) return false;
-
-    new_node->neighbor_count = 0;
-    new_node->capacity = initial_capacity;
-
-    // graph->node_count++; // * This is done above when assigning new_node
+    graph->node_count++;
     return true;
 }
 

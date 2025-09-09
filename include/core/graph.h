@@ -20,30 +20,30 @@ typedef struct {
 } EdgeNode;
 
 // * simple struct with dynamic array of edges 
-typedef struct {
+typedef struct Node {
     int id;
-    EdgeNode* neighbors; // ! latter implement hash table for O(1) access for densly connected graphs  
+    EdgeNode* neighbors;
     size_t neighbor_count;
     size_t capacity;
+    struct Node *next;
 } Node;
 
 // * simple struct with dynamic array of nodes
 typedef struct {
     GraphType type;
-    Node* nodes; // ! I want a hash table of nodes for O(1) access
+    Node** nodes; // * Hash table for nodes
     size_t node_count;
     size_t node_capacity;
 } Graph;
 
 
 // Graph building tools
-Graph* graph_create(GraphType type, size_t initial_capacity);
+Graph* graph_create(GraphType type, size_t initial_capacity, float alpha);
 void graph_destroy(Graph* graph);
+
+// Edit graph tools
 bool graph_add_node(Graph* graph, int node_id, int initial_capacity);
 bool graph_add_edge(Graph* graph, int from, int to, double weight);
-
-size_t graph_node_count(const Graph* graph);
-size_t graph_edge_count(const Graph* graph);
 
 bool graph_remove_node(Graph* graph, int node_id);
 bool graph_remove_edge(Graph* graph, int from, int to);
