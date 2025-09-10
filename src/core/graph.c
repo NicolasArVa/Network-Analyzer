@@ -13,7 +13,7 @@ size_t graph_edge_count(const Graph* graph) {
 
     size_t total_edges = 0;
     for (size_t i = 0; i < graph->node_count; i++) {
-        total_edges += graph->nodes[i].neighbor_count;
+        total_edges += graph->nodes[i]->neighbor_count;
     }
 
     // For undirected graphs, each edge is counted twice

@@ -3,6 +3,7 @@
 #include <math.h>
 #include "../../include/core/graph.h"
 #include "../../include/utils/hash_table_utils.h"
+#include "../../include/utils/graph_build_utils.h"
 
 # define INITIAL_CAPACITY 4
 
@@ -51,85 +52,6 @@ void graph_destroy(Graph* graph) {
     free(graph);
 }
 
-// Helper: find Node by ID (Hash table lookup)
-static Node* find_node(Graph* graph, int node_id) {
-    unsigned int index = hash(node_id, graph->node_capacity);
-
-    Node *current = graph->nodes[index];
-
-    while (current) {
-        if (current->id == node_id) return current;  // found
-        current = current->next;
-    }
-    return NULL;  // not found
-}
-
-// Helper: detect if edge exists
-// TODO: look for a faster method
-static bool edge_exists(Node* from, int to) {
-    for (size_t i = 0; i < from->neighbor_count; i++) {
-        if (from->neighbors[i].node_id == to) return true;
-    }
-    return false;
-}
-
-// Helper: detect if graph needs to be resized
-static needs_resizing(Graph* graph) {
-    return (graph->node_count >= ALPHA * graph->node_capacity);
-}
-
-//Helper: resize nodes array
-static bool graph_resize (Graph* graph) {
-        size_t new_capacity = graph->node_capacity * 2; // * 1.5 to reset the table alpha to 0.5
-
-        Node **new_nodes = calloc(new_capacity, sizeof(Node*));
-        if (!new_nodes) {
-            fprintf(stderr, "Failed to resize graph's nodes array\n");
-            return false;
-        }
-
-        for (size_t i = 0; i < graph->node_capacity; i++) {
-            Node *bucket = graph->nodes[i];
-
-            while (bucket) {
-                Node *head = remove_first(&bucket);
-                add_to_hash_table(head, new_capacity, new_nodes);
-            }
-        }
-
-        free(graph->nodes);
-        graph->nodes = new_nodes;
-        graph->node_capacity = new_capacity;
-
-        printf("Graph successfully resized\n");
-        return true;
-}
-
-// Helper: Create node
-static Node* create_node(int node_id, int node_capacity) {
-    // Allocate memory for new node
-    Node* new_node = malloc(sizeof(Node));
-    if (!new_node) {
-        fprintf(stderr, "Failed to create new node\n");
-        return NULL;
-    }
-
-    new_node->id = node_id;
-    new_node->neighbors = NULL;
-    new_node->neighbor_count = 0;
-    new_node->capacity = node_capacity;
-    new_node->next = NULL;
-
-    new_node->neighbors = calloc(node_capacity, sizeof(EdgeNode)); // Initialize neighbors array
-    if (!new_node->neighbors) {
-        fprintf(stderr, "Failed to initialize new node's neighbors\n");
-        free(new_node);
-        return NULL;
-    }
-
-    return new_node;
-}
-
 bool graph_add_node(Graph* graph, int node_id, int node_capacity) {
     // Check if graph
     if (!graph) {
@@ -144,7 +66,7 @@ bool graph_add_node(Graph* graph, int node_id, int node_capacity) {
     }
 
     // Check if nodes arrays needs rezising
-    if (needs_resizing(graph)) {
+    if (graph_needs_resize(graph)) {
         // Resize nodes table
         printf("Graph needs to be resized...\n");
         if (!graph_resize(graph)) return false;
@@ -170,50 +92,58 @@ bool graph_add_node(Graph* graph, int node_id, int node_capacity) {
 }
 
 bool graph_add_edge(Graph* graph, int from, int to, double weight) {
-    if (!graph) return false;
+    if (!graph) {
+        fprintf(stderr, "Graph does not exist\n");
+        return false;
+    }
 
     Node* from_node = find_node(graph, from);
+    if (!from_node) {
+        fprintf(stderr, "No node with ID %d exists\n", from);
+        return false;
+    }
     Node* to_node = find_node(graph, to);
-
-    if (!from_node || !to_node) return false;
+    if (!to_node) {
+        fprintf(stderr, "No node with ID %d exists\n", to);
+        return false;
+    }
 
     // Check if edge already exists
-    if (edge_exists(from_node, to)) return false;
+    if (edge_exists(from_node, to)) {
+        fprintf(stderr, "An edge %d -> %d already exists\n", from, to);
+        return false;
+    }
 
     // Check if edges array needs resizing
-    if (from_node->neighbor_count >= from_node->capacity) {
-        size_t new_capacity = from_node->capacity * 2;
-        EdgeNode* new_neighbors = realloc(from_node->neighbors, new_capacity * sizeof(EdgeNode));
-        if (!new_neighbors) return false;
-
-        from_node->neighbors = new_neighbors;
-        from_node->capacity = new_capacity;
+    if (node_needs_resize(from_node)) {
+        if (!node_resize(from_node)) {
+            fprintf(stderr, "Failed to add edge to node with ID %d\n", from_node->id);
+            return false;
+        }
     }
 
     // Add new edge/neighbor
-    EdgeNode* new_neighbor = &from_node->neighbors[from_node->neighbor_count ++];
-
+    EdgeNode* new_neighbor = &from_node->neighbors[from_node->neighbor_count];
     new_neighbor->node_id = to;
     new_neighbor->weight = weight;
+    from_node->neighbor_count ++;
 
     // For undirected graphs, add reverse edge
     if (graph->type == GRAPH_UNDIRECTED) {
-        // ! no checking for reverse edge here. if graph is undirected, this should have benn detected earlier
+        // * no need to check for reverse edge here, the forward exists then the reverse exists too
         // Check if edges array needs resizing
-        if (to_node->neighbor_count >= to_node->capacity) {
-            size_t new_capacity = to_node->capacity * 2;
-            EdgeNode* new_neighbor = realloc(to_node->neighbors, new_capacity * sizeof(EdgeNode));
-            if (!new_neighbor) return false;
-
-            to_node->neighbors = new_neighbor;
-            to_node->capacity = new_capacity;
+        if (node_needs_resize(to_node)) {
+            if (!node_resize(to_node)) {
+                fprintf(stderr, "Failed to add new edge\n");
+                return false;
+            }
         }
 
         // Add reverse edge
-        EdgeNode* new_edge = &to_node->neighbors[to_node->neighbor_count ++];
-
+        EdgeNode* new_edge = &to_node->neighbors[to_node->neighbor_count];
         new_edge->node_id = from;
         new_edge->weight = weight;
+        to_node->neighbor_count ++;
     }
 
     return true;
@@ -238,7 +168,7 @@ bool graph_remove_edge(Graph* graph, int from, int to) {
     }
 
     return false;
-};
+}
 
 
 bool graph_remove_node(Graph* graph, int node_id) {
