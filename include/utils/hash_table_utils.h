@@ -8,11 +8,10 @@
 # define ALPHA 0.75 // load factor
 
 unsigned int hash(int id, int table_size);
-bool exists_in_hash_table(int id, size_t table_size, Node** table);
 
 bool add_to_hash_table(Node* node, size_t table_size, Node** table);
 bool delete_from_hash_table(int id, size_t table_size, Node** table);
 
-Node* remove_first(Node** list);
+Node* pop_bucket(Node** list);
 
 #endif HASH_H

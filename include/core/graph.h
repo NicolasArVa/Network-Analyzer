@@ -37,15 +37,16 @@ typedef struct {
 } Graph;
 
 
-// Graph building tools
+// Graph initialization/deletion tools
 Graph* graph_create(GraphType type, size_t initial_capacity, float alpha);
 void graph_destroy(Graph* graph);
 
 // Edit graph tools
 bool graph_add_node(Graph* graph, int node_id, int initial_capacity);
-bool graph_add_edge(Graph* graph, int from, int to, double weight);
-
 bool graph_remove_node(Graph* graph, int node_id);
+
+bool graph_add_edge(Graph* graph, int from, int to, double weight);
+bool graph_edit_edge(Graph* graph, int from, int to, double weight);
 bool graph_remove_edge(Graph* graph, int from, int to);
 
 // Basic properties getters
