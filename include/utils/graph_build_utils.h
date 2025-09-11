@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include "../../include/core/graph.h"
+#include "../../include/core/graph_build.h"
 #include "../../include/utils/hash_table_utils.h"
 
 
@@ -25,40 +25,26 @@ typedef enum {
 } CustomBool;
 
 // Helpers: resize detection
-static inline CustomBool graph_needs_resize(Graph* graph) {
-    CHECK_EXISTS(graph, ERROR, "Graph not initiallized");
-
-    // Require hash table utils
-    if (graph->node_count >= ALPHA * graph->node_capacity) {
-        return OK_TRUE;
-    } else {
-        return OK_FALSE;
-    }
+static inline bool graph_needs_resize(Graph* graph) {
+    // Require hash table
+    return (graph->node_count >= ALPHA * graph->node_capacity);
 }
 
-static inline CustomBool node_needs_resize(Node* node) {
-    CHECK_EXISTS(node, ERROR, "Node not initiallized");
-    if (node->neighbor_count >= node->capacity) {
-        return OK_TRUE;
-    } else {
-        return OK_FALSE;
-    }
+static inline bool node_needs_resize(Node* node) {
+    return (node->neighbor_count >= node->neighbor_capacity);
 }
 
 
 // Graph related utils
-Node* find_node(Graph* graph, int node_id);
 bool graph_resize (Graph* graph);
+Node* find_node(Graph* graph, int node_id);
 
 // Node related utils
-Node* create_node(int node_id, int node_capacity);
-bool node_add_edge(Node* node, int to, double weight);
-bool node_edit_edge(Node* node, int to, double weight);
-bool node_remove_edge(Node* node, int to);
-
+Node* create_node(int node_id, size_t neighbor_capacity);
 bool node_resize(Node* node);
 
-// Edge related utils
-bool edge_exists(Node* from, int to);
+bool node_add_edge(Node* node, int to, double weight, double* old_weight, bool overwrite);
+bool node_remove_edge(Node* node, int to, double* old_weight);
+
 
 #endif GRAPH_BUILD_UTILS_H

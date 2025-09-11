@@ -24,7 +24,7 @@ int main() {
     printf("Network Analysis Toolkit - Testing Basic Graph\n");
 
     // initialize small graph
-    Graph* g = graph_create(GRAPH_UNDIRECTED, 4);
+    Graph* g = graph_create(GRAPH_UNDIRECTED, 4, 0.75);
     if (!g) {
         fprintf(stderr, "Failed to create graph\n");
         return 1;
@@ -32,15 +32,15 @@ int main() {
 
     // adding nodes
     printf("Adding nodes 1, 2, 3...\n");
-    graph_add_node(g, 1, N);
-    graph_add_node(g, 2, N);
-    graph_add_node(g, 3, N);
+    graph_insert_node(g, 1, N);
+    graph_insert_node(g, 2, N);
+    graph_insert_node(g, 3, N);
 
     // Add edges
     printf("Adding edges...\n");
-    graph_add_edge(g, 1, 2, 1.5);
-    graph_add_edge(g, 2, 3, 2.0);
-    graph_add_edge(g, 3, 1, 0.8);
+    graph_insert_edge(g, 1, 2, 1.5);
+    graph_insert_edge(g, 2, 3, 2.0);
+    graph_insert_edge(g, 3, 1, 0.8);
 
     // check result
     printf("Graph has %zu nodes and %zu edges\n",

@@ -45,7 +45,7 @@ Node* find_node(Graph* graph, int node_id) {
     return NULL;  // not found
 }
 
-Node* create_node(int node_id, int node_capacity) {
+Node* create_node(int node_id, size_t neighbor_capacity) {
     // Allocate memory for new node
     Node* new_node = malloc(sizeof(Node));
     if (!new_node) {
@@ -55,46 +55,69 @@ Node* create_node(int node_id, int node_capacity) {
     
     new_node->id = node_id;
     new_node->neighbor_count = 0;
-    new_node->capacity = node_capacity;
+    new_node->neighbor_capacity = neighbor_capacity;
     new_node->next = NULL;
     
     // Initialize neighbors array
-    new_node->neighbors = calloc(node_capacity, sizeof(EdgeNode));
+    new_node->neighbors = malloc(neighbor_capacity * sizeof(EdgeNode));
     if (!new_node->neighbors) {
         fprintf(stderr, "Failed to initialize new node's neighbors, node will not be created\n");
         free(new_node);
         return NULL;
+    }
+
+    // Initialize neighbors with sentinel values
+    for ( size_t i = 0; i < neighbor_capacity; i++) {
+        new_node->neighbors[i].node_id = -1;
+        new_node->neighbors[i].weight = NAN;
     }
     
     return new_node;
 }
 
 bool node_resize(Node* node) {
-    size_t new_capacity = node->capacity * 2;
+    size_t new_capacity = node->neighbor_capacity * 2;
     EdgeNode* new_neighbors = realloc(node->neighbors, new_capacity * sizeof(EdgeNode));
     if (!new_neighbors) {
         fprintf(stderr, "Failed to resize node's neighbors array\n");
         return false;
     }
 
+    // Initialize new neighbors with sentinel values
+    for (size_t i = node->neighbor_capacity; i < new_capacity; i++) {
+        new_neighbors[i].node_id = -1;
+        new_neighbors[i].weight = NAN;
+    }
+
     node->neighbors = new_neighbors;
-    node->capacity = new_capacity;
+    node->neighbor_capacity = new_capacity;
     return true;
 }
 
-bool node_add_edge(Node* node, int to, double weight){    
-    // Check if node needs to be resized
-    switch (node_needs_resize(node)) {
-        case OK_TRUE:
-            bool success = node_resize(node);  // function has own error logs
-            if (!success) return false;
-            break;
-            
-        case OK_FALSE:
-            break;
+bool node_add_edge(Node* node, int to, double weight, double* old_weight, bool update) {
+    // Check if edge already exists
+    if (update) {
+        for (size_t i = 0; i < node->neighbor_count; i++) {
+            if (node->neighbors[i].node_id == to) {
+                if (old_weight) *old_weight = node->neighbors[i].weight;
+                node->neighbors[i].weight = weight;
+                return true;
+            }
+        }      
 
-        case ERROR:
-            return false;
+    } else {
+        for (size_t i = 0; i < node->neighbor_count; i++) {
+            if (node->neighbors[i].node_id == to) {
+                fprintf(stderr, "Edge from node %d to node %d already exists\n", node->id, to);
+                return false;
+            }
+        }
+    }
+
+    // Check if node needs to be resized
+    if (node_needs_resize(node)) {
+        bool success = node_resize(node);  // function has own error logs
+        if (!success) return false;
         
     }
 
@@ -107,45 +130,27 @@ bool node_add_edge(Node* node, int to, double weight){
     return true;
 }
 
-bool node_edit_edge(Node* node, int to, double weight) {
-    CHECK_EXISTS(node, false, "Node not initialized");
-
+bool node_remove_edge(Node* node, int to, double* old_weight) {
     for (size_t i = 0; i < node->neighbor_count; i++) {
         if (node->neighbors[i].node_id == to) {
-            node->neighbors[i].weight = weight;
-            return true;
-        }
-    }
+            if (old_weight) *old_weight = node->neighbors[i].weight;
 
-    return false;
-}
-
-bool node_remove_edge(Node* node, int to) {
-    CHECK_EXISTS(node, false, "Node not initialized");
-
-    for (size_t i = 0; i < node->neighbor_count; i++) {
-        if (node->neighbors[i].node_id == to) {
-            for (size_t j = i; j < node->neighbor_count - 1; j++) {
-                node->neighbors[j] = node->neighbors[j + 1];
+            size_t num_to_move = node->neighbor_count - i - 1;
+            if (num_to_move > 0) {
+                memmove(&node->neighbors[i], 
+                    &node->neighbors[i + 1], 
+                    num_to_move * sizeof(EdgeNode)); // shifts remaining elements to the left
             }
-
+            
+            // decrement neighbor count
             node->neighbor_count--;
+            // * OPTIONAL: set sentinel value for cleaner debug
+            node->neighbors[node->neighbor_count].node_id = -1;   // invalid id
+            node->neighbors[node->neighbor_count].weight = NAN;   // invalid weight
             return true;
         }
     }
 
     fprintf(stderr, "Edge from node %d to node %d does not exist\n", node->id, to);
-    return false;
-}
-
-bool edge_exists(Node* node, int to) {
-    CHECK_EXISTS(node, NULL, "Node not initialized");
-
-    for (size_t i = 0; i < node->neighbor_count; i++) {
-        if (node->neighbors[i].node_id == to) {
-            return true;
-        }
-    }
-
     return false;
 }

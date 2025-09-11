@@ -24,7 +24,7 @@ typedef struct Node {
     int id;
     EdgeNode* neighbors;
     size_t neighbor_count;
-    size_t capacity;
+    size_t neighbor_capacity;
     struct Node *next;
 } Node;
 
@@ -42,11 +42,11 @@ Graph* graph_create(GraphType type, size_t initial_capacity, float alpha);
 void graph_destroy(Graph* graph);
 
 // Edit graph tools
-bool graph_add_node(Graph* graph, int node_id, int initial_capacity);
+bool graph_insert_node(Graph* graph, int node_id, int initial_capacity);
 bool graph_remove_node(Graph* graph, int node_id);
 
-bool graph_add_edge(Graph* graph, int from, int to, double weight);
-bool graph_edit_edge(Graph* graph, int from, int to, double weight);
+bool graph_insert_edge(Graph* graph, int from, int to, double weight);
+bool graph_update_edge(Graph* graph, int from, int to, double weight);
 bool graph_remove_edge(Graph* graph, int from, int to);
 
 // Basic properties getters

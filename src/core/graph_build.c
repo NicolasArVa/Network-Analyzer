@@ -15,7 +15,7 @@ Graph* graph_create(GraphType type, size_t initial_capacity, float alpha) {
         return NULL;
     };
 
-    if (initial_capacity <= 0) initial_capacity = INITIAL_CAPACITY;
+    if (initial_capacity == 0) initial_capacity = INITIAL_CAPACITY;
 
     graph->type = type;
     graph->nodes = calloc(initial_capacity, sizeof(Node*));
@@ -31,7 +31,7 @@ Graph* graph_create(GraphType type, size_t initial_capacity, float alpha) {
 }
 
 void graph_destroy(Graph* graph) {
-    CHECK_EXISTS(graph, NULL, "Graph not initialized");
+    if (!graph) return;
 
     for (size_t i = 0; i < graph->node_capacity; i++) {
         Node *current = graph->nodes[i];
@@ -52,15 +52,12 @@ void graph_destroy(Graph* graph) {
     free(graph);
 }
 
-bool graph_add_node(Graph* graph, int node_id, int node_capacity) {
+bool graph_insert_node(Graph* graph, int node_id, size_t node_capacity) {
     CHECK_EXISTS(graph, false, "Graph not initialized");
 
     // Check if node already exists in graph
     Node *node = find_node(graph, node_id);
-    if (node) {
-        fprintf(stderr, "A node with ID %d already exists in the graph\n", node_id);
-        return false;
-    }
+    CHECK_EXISTS(!node, false, "A node with ID %d already exists in the graph", node_id);
 
     // Check if nodes arrays needs rezising
     if (graph_needs_resize(graph)) {
@@ -89,25 +86,28 @@ bool graph_remove_node(Graph* graph, int node_id) {
     CHECK_EXISTS(graph, false, "Graph not initialized");
     
     Node* node = find_node(graph, node_id);
-    if (!node) {
-        fprintf(stderr, "A node with ID %d does not exist in the graph\n", node_id);
-        return false;
-    }
+    CHECK_EXISTS(node, false, "A node with ID %d does not exist in the graph", node_id);
     
     // Remove all edges that pointto this node from other nodes
     if (graph->type == GRAPH_UNDIRECTED) {
+        bool success = false;
         for (size_t i = 0; i < node->neighbor_count; i++) {
             EdgeNode edge = node->neighbors[i];
 
-            Node *current = find_node(graph, edge.node_id);  // quite sure this won't return NULL due how edges are added
-            if (current) node_remove_edge(current, node_id);  // just in case 
+            Node *current = find_node(graph, edge.node_id);  // quite sure this won't return NULL due to edges only point to existing nodes
+            if (current) success = node_remove_edge(current, node_id, NULL);  // just in case 
+            if (!success) {
+                fprintf(stderr, "Failed to remove edge between nodes %d-%d, removal of node %d incomplete\n", edge.node_id, node_id, node_id);
+                fprintf(stderr, "Fatal error: Undirected graph corrupted, it might contain asimmetric edges\n");
+                return false;
+            }
         }
     } else {
         for (size_t i = 0; i < graph->node_capacity; i++) {
             Node *current = graph->nodes[i];
 
             while (current) {
-                node_remove_edge(current, node_id);
+                (void) node_remove_edge(current, node_id, NULL);
                 current = current->next;
             }
         }
@@ -121,73 +121,97 @@ bool graph_remove_node(Graph* graph, int node_id) {
     return true;
 }
 
-bool graph_add_edge(Graph* graph, int from, int to, double weight) {
+bool graph_insert_edge(Graph* graph, int from, int to, double weight) {
     CHECK_EXISTS(graph, false, "Graph not initialized");
 
     Node* from_node = find_node(graph, from);
-    Node* to_node = find_node(graph, to);
-    if (!from_node || !to_node) {
-        fprintf(stderr, "A node with ID %d or %d does not exist in the graph\n", from, to);
-        return false;
-    }
-    
-    if (edge_exists(from_node, to)) {
-        fprintf(stderr, "Edge from node %d to node %d already exists\n", from, to);
-        return false;
-    }
+    CHECK_EXISTS(from_node, false, "A node with ID %d does not exist in the graph", from);
 
-    bool success = node_add_edge(from_node, to, weight);
-    if (!success) {
-        fprintf(stderr, "Failed to add edge from node %d to node %d\n", from, to);
-        return false;
-    }
+    Node* to_node = find_node(graph, to);
+    CHECK_EXISTS(to_node, false, "A node with ID %d does not exist in the graph", to);
+
+    bool success = node_add_edge(from_node, to, weight, NULL, false);
+    CHECK_EXISTS(success, false, "Failed to add edge %d->%d", from, to);
     
     // For undirected graphs, add reverse edge
     if (graph->type == GRAPH_UNDIRECTED) {
-        success = node_add_edge(to_node, from, weight);  // checks if edge already exists
+        success = node_add_edge(to_node, from, weight, NULL, false);
+        if (success) return true;
+
+        // Undo addition of forward edge
+        success = node_remove_edge(from_node, to, NULL);
         if (!success) {
-            // Remove forward edge
-            fprintf(stderr, "Failed to add reverse edge from node %d to node %d\n", to, from);
-            node_remove_edge(from_node, to); // edge should exist at this point
+            fprintf(stderr,
+                "Fatal error: Undirected graph has been corrupted. " 
+                "rollback failed to revert forward edge %d->%d\n", from, to);
+                return false;
+        }
+    }
+
+    fprintf(stderr, "Failed to add edge between nodes %d and %d\n", from, to);
+    return false;
+}
+
+bool graph_update_edge(Graph* graph, int from, int to, double weight){
+    CHECK_EXISTS(graph, false, "Graph not initialized");
+
+    Node* from_node = find_node(graph, from);
+    CHECK_EXISTS(from_node, false, "A node with ID %d does not exist in the graph", from);
+
+    Node* to_node = find_node(graph, to);
+    CHECK_EXISTS(to_node, false, "A node with ID %d does not exist in the graph", to);
+
+    bool success = node_edit_edge(from_node, to, weight, NULL, true);
+    CHECK_EXISTS(success, false, "Failed to edit edge %d->%d", from, to);
+
+    // For undirected graphs, edit reverse edge
+    if (graph->type == GRAPH_UNDIRECTED) {
+        double old_weight = 0.0;
+        success = node_edit_edge(to_node, from, weight, &old_weight, true);
+        if (success) return true;
+
+        // Undo changes to forward edge
+        success = node_edit_edge(from_node, to, old_weight, NULL, true);
+        if (!success) {
+            fprintf(stderr, 
+                "Fatal error: Undirected graph has been corrupted. "
+                "rollback failed to restore forward edge %d->%d\n", from, to);
             return false;
         }
     }
 
-    return true;
-}
-
-bool graph_edit_edge(Graph* graph, int from, int to, double weight){
-    if (!graph_exists(graph)) return false;
-
-    Node* from_node = find_node(graph, from);
-    Node* to_node = find_node(graph, to);
-    if (!from_node || !to_node) return false;
-
-    for (size_t i = 0; i < from_node->neighbor_count; i++) {
-        if (from_node->neighbors[i].node_id == to) {
-            from_node->neighbors[i].weight = weight;
-            return true;
-        }
-    }
-
-    fprintf(stderr, "Edge from node %d to node %d does not exist\n", from, to);
-    return false;
+    fprintf(stderr, "Failed to edit edge between nodes %d and %d\n", from, to);
+    return false;       
 }
 
 bool graph_remove_edge(Graph* graph, int from, int to) {
-    if (!graph_exists(graph)) return false;
+    CHECK_EXISTS(graph, false, "Graph not initialized");
 
-    Node *from_node = find_node(graph, from);
-    Node *to_node = find_node(graph, to);
-    if (!from_node || !to_node) return false;
+    Node* from_node = find_node(graph, from);
+    CHECK_EXISTS(from_node, false, "A node with ID %d does not exist in the graph", from);
 
-    for (size_t i = 0; i < from_node->neighbor_count - 1; i++) {
-        if (from_node->neighbors[i].node_id == to) {
-            from_node->neighbors[i] = from_node->neighbors[i + 1];
+    Node* to_node = find_node(graph, to);
+    CHECK_EXISTS(to_node, false, "A node with ID %d does not exist in the graph", to);
 
-            from_node->neighbor_count--;
+    bool success = node_remove_edge(from_node, to, NULL);
+    CHECK_EXISTS(success, false, "Failed to remove edge %d->%d", from, to);
+
+    // For undirected graphs, edit reverse edge
+    if (graph->type == GRAPH_UNDIRECTED) {
+        double old_weight = 0.0;
+        success = node_remove_edge(to_node, from, &old_weight);
+        if (success) return true;
+
+        // Undo removal of forward edge
+        success = node_add_edge(from_node, to, old_weight, NULL, true);
+        if (!success) {
+            fprintf(stderr, 
+                "Fatal error: Undirected graph has been corrupted. "
+                "rollback failed to restore forward edge %d->%d\n", from, to);
+            return false;
         }
     }
 
-    return true;
+    fprintf(stderr, "Failed to remove edge between nodes %d and %d\n", from, to);
+    return false;
 }
