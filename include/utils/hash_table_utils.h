@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 #include <stdbool.h>
-#include "../../include/core/graph.h"
+#include "core/graph_build.h"
 
 # define ALPHA 0.75 // load factor
 
@@ -17,4 +17,4 @@ Node* pop_bucket(Node** list);
 bool add_to_hash_table(Node* node, size_t table_size, Node** table);
 bool delete_from_hash_table(int id, size_t table_size, Node** table);
 
-#endif HASH_H
+#endif

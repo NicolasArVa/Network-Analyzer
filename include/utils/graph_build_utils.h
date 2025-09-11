@@ -4,17 +4,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include "../../include/core/graph_build.h"
-#include "../../include/utils/hash_table_utils.h"
+#include "core/graph_build.h"
+#include "utils/hash_table_utils.h"
 
 
 // Helper macro: check if elements exist allowing for custom error messages
-#define CHECK_EXISTS(ptr, value, fmsg, ...)                 \
-    do {                                                    \
-        if (!(ptr)) {                                       \
-            fprintf(stderr, fmsg "\n", ##__VA_ARGS__);      \ 
-            return value;                                   \
-        }                                                   \
+#define CHECK_EXISTS(ptr, value, fmsg, ...)\
+    do {\
+        if (!(ptr)) {\
+            fprintf(stderr, fmsg "\n", ##__VA_ARGS__); return value;\
+        }\
     } while (0)
 
 //  Custom bool to handle errors
@@ -47,4 +46,4 @@ bool node_add_edge(Node* node, int to, double weight, double* old_weight, bool o
 bool node_remove_edge(Node* node, int to, double* old_weight);
 
 
-#endif GRAPH_BUILD_UTILS_H
+#endif

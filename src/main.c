@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "../include/core/graph.h"
+#include "core/graph_build.h"
+#include "core/graph_operations.h"
 
 #define N 4
 
@@ -24,7 +25,7 @@ int main() {
     printf("Network Analysis Toolkit - Testing Basic Graph\n");
 
     // initialize small graph
-    Graph* g = graph_create(GRAPH_UNDIRECTED, 4, 0.75);
+    Graph* g = graph_create(GRAPH_UNDIRECTED, 4);
     if (!g) {
         fprintf(stderr, "Failed to create graph\n");
         return 1;

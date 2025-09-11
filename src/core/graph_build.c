@@ -1,14 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include "../../include/core/graph.h"
-#include "../../include/utils/hash_table_utils.h"
-#include "../../include/utils/graph_build_utils.h"
+#include "core/graph_build.h"
+#include "utils/hash_table_utils.h"
+#include "utils/graph_build_utils.h"
 
 # define INITIAL_CAPACITY 4
 
 // Basic graph operations
-Graph* graph_create(GraphType type, size_t initial_capacity, float alpha) {
+Graph* graph_create(GraphType type, size_t initial_capacity) {
     Graph *graph = malloc(sizeof(Graph));
     if (!graph) {
         fprintf(stderr, "Failed to allocate memory for graph\n");
@@ -53,7 +53,7 @@ void graph_destroy(Graph* graph) {
 }
 
 bool graph_insert_node(Graph* graph, int node_id, size_t node_capacity) {
-    CHECK_EXISTS(graph, false, "Graph not initialized");
+    CHECK_EXISTS(graph, false, "%s", "Graph not initialized");
 
     // Check if node already exists in graph
     Node *node = find_node(graph, node_id);
@@ -83,7 +83,7 @@ bool graph_insert_node(Graph* graph, int node_id, size_t node_capacity) {
 }
 
 bool graph_remove_node(Graph* graph, int node_id) {
-    CHECK_EXISTS(graph, false, "Graph not initialized");
+    CHECK_EXISTS(graph, false, "%s", "Graph not initialized");
     
     Node* node = find_node(graph, node_id);
     CHECK_EXISTS(node, false, "A node with ID %d does not exist in the graph", node_id);
@@ -122,7 +122,7 @@ bool graph_remove_node(Graph* graph, int node_id) {
 }
 
 bool graph_insert_edge(Graph* graph, int from, int to, double weight) {
-    CHECK_EXISTS(graph, false, "Graph not initialized");
+    CHECK_EXISTS(graph, false, "%s", "Graph not initialized");
 
     Node* from_node = find_node(graph, from);
     CHECK_EXISTS(from_node, false, "A node with ID %d does not exist in the graph", from);
@@ -153,7 +153,7 @@ bool graph_insert_edge(Graph* graph, int from, int to, double weight) {
 }
 
 bool graph_update_edge(Graph* graph, int from, int to, double weight){
-    CHECK_EXISTS(graph, false, "Graph not initialized");
+    CHECK_EXISTS(graph, false, "%s", "Graph not initialized");
 
     Node* from_node = find_node(graph, from);
     CHECK_EXISTS(from_node, false, "A node with ID %d does not exist in the graph", from);
@@ -161,17 +161,17 @@ bool graph_update_edge(Graph* graph, int from, int to, double weight){
     Node* to_node = find_node(graph, to);
     CHECK_EXISTS(to_node, false, "A node with ID %d does not exist in the graph", to);
 
-    bool success = node_edit_edge(from_node, to, weight, NULL, true);
+    bool success = node_add_edge(from_node, to, weight, NULL, true);
     CHECK_EXISTS(success, false, "Failed to edit edge %d->%d", from, to);
 
     // For undirected graphs, edit reverse edge
     if (graph->type == GRAPH_UNDIRECTED) {
         double old_weight = 0.0;
-        success = node_edit_edge(to_node, from, weight, &old_weight, true);
+        success = node_add_edge(to_node, from, weight, &old_weight, true);
         if (success) return true;
 
         // Undo changes to forward edge
-        success = node_edit_edge(from_node, to, old_weight, NULL, true);
+        success = node_add_edge(from_node, to, old_weight, NULL, true);
         if (!success) {
             fprintf(stderr, 
                 "Fatal error: Undirected graph has been corrupted. "
@@ -185,7 +185,7 @@ bool graph_update_edge(Graph* graph, int from, int to, double weight){
 }
 
 bool graph_remove_edge(Graph* graph, int from, int to) {
-    CHECK_EXISTS(graph, false, "Graph not initialized");
+    CHECK_EXISTS(graph, false, "%s", "Graph not initialized");
 
     Node* from_node = find_node(graph, from);
     CHECK_EXISTS(from_node, false, "A node with ID %d does not exist in the graph", from);

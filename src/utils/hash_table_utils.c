@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include "../../include/utils/hash_table_utils.h"
-#include "../../include/utils/graph_build_utils.h"
+#include "utils/hash_table_utils.h"
+#include "utils/graph_build_utils.h"
 
 unsigned int hash(int id, int table_size) { 
     unsigned int x = (unsigned int)id;

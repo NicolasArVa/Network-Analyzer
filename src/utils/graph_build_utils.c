@@ -1,9 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include "../../include/core/graph.h"
-#include "../../include/utils/hash_table_utils.h"
-#include "../../include/utils/graph_build_utils.h"
+#include <string.h>
+#include "core/graph_build.h"
+#include "utils/hash_table_utils.h"
+#include "utils/graph_build_utils.h"
 
 //Helper: resize nodes array
 bool graph_resize (Graph* graph) {
