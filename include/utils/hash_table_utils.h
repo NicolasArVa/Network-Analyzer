@@ -4,8 +4,10 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "core/graph_build.h"
+#include "utils/general_utils.h"
 
 # define ALPHA 0.75 // load factor
+// TODO: change bool to -1, 0, 1
 
 // Hash function
 unsigned int hash(int id, int table_size);

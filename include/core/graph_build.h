@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdbool.h>
+#include "utils/general_utils.h"
 
 #define INITIAL_CAPACITY 4
 
@@ -22,7 +23,7 @@ typedef struct {
 // * simple struct with dynamic array of edges 
 typedef struct Node {
     int id;
-    EdgeNode* neighbors;
+    EdgeNode* neighbors; // * Dynamic array
     size_t neighbor_count;
     size_t neighbor_capacity;
     struct Node *next;
@@ -32,10 +33,12 @@ typedef struct Node {
 typedef struct {
     GraphType type;
     Node** nodes; // * Hash table for nodes
+    Node** node_ids;
     size_t node_count;
     size_t node_capacity;
 } Graph;
 
+// TODO: change bool to -1, 0, 1
 
 // Graph initialization/deletion tools
 Graph* graph_create(GraphType type, size_t initial_capacity);

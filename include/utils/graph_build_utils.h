@@ -4,24 +4,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include "core/graph_build.h"
 #include "utils/hash_table_utils.h"
+#include "utils/general_utils.h"
+#include "core/graph_build.h"
 
+// TODO: change bool to -1, 0, 1
 
-// Helper macro: check if elements exist allowing for custom error messages
-#define CHECK_EXISTS(ptr, value, fmsg, ...)\
-    do {\
-        if (!(ptr)) {\
-            fprintf(stderr, fmsg "\n", ##__VA_ARGS__); return value;\
-        }\
-    } while (0)
-
-//  Custom bool to handle errors
-typedef enum {
-    ERROR = -1,
-    OK_FALSE = 0,
-    OK_TRUE = 1
-} CustomBool;
 
 // Helpers: resize detection
 static inline bool graph_needs_resize(Graph* graph) {

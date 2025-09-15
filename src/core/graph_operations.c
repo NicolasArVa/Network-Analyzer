@@ -2,8 +2,14 @@
 #include <stdlib.h>
 #include "core/graph_build.h"
 #include "core/graph_operations.h"
+#include "utils/general_utils.h"
 
 // Basic properties getters
+// TODO: change bool to -1, 0, 1
+
+
+errBool graph_is_directed(const Graph* graph);
+
 size_t graph_node_count(const Graph* graph) {
     if (!graph) return 0;
     return graph->node_count;
