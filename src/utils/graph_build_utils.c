@@ -7,38 +7,48 @@
 #include "utils/hash_table_utils.h"
 #include "utils/graph_build_utils.h"
 
-// TODO: change bool to -1, 0, 1
-
-// * Safety checks are carried out before the functions are called
+# define CHECK_NODE \
+    if (!node) {\
+        fprintf(stderr, "Error: Invalid node passed to %s function call\n", __func__);\
+        return STATUS_INVALID;\
+    }
 
 //Helper: resize nodes array
 Status graph_resize (Graph* graph) {
-    if (!graph) {
-        fprintf(stderr, "Fatal error: Graph is corrupted\n");
-        return STATUS_ERROR;
-    }
+    CHECK_GRAPH
     
     size_t new_capacity = graph->node_capacity * 2; // * 1.5 to reduce the hash table alpha to 0.5
     Node **new_nodes = calloc(new_capacity, sizeof(Node*));
     if (!new_nodes) {
         fprintf(stderr, "Error: Failed to rezize graph, keeping previous capacity\n");
-        return STATUS_WARNING;
+        return STATUS_OOM;
     }
 
+    // Rehash all existing nodes into new table
     for (size_t i = 0; i < graph->node_capacity; i++) {
-        Node *bucket = graph->nodes[i];
+        Node *current = graph->nodes[i];
 
-        while (bucket) {
-            Node *head = pop_bucket(&bucket);
-            switch(add_to_hash_table(head, new_capacity, new_nodes)) {
+        while (current) {
+            Node *next = current->next;
+            // Node *head = pop_bucket(&bucket);
+            switch(add_to_hash_table(current, new_capacity, new_nodes)) {
                 case STATUS_SUCCESS:
-                case STATUS_WARNING:
                     break;
-                case STATUS_ERROR: // add_to_hash_table has own error messages
-                    // free new nodes
+                case STATUS_INVALID: // should never happen
+                    // If node is invalid, assume graph has been corrupted
+                    fprintf(stderr, "Fatal error: Graph has been corrupted during resize");
+                    free(new_nodes);
+                    return STATUS_ERROR;
+                case STATUS_WARNING: // should never happen
+                    // if node already exists in the new table, assume graph has been corrupted
+                    fprintf(stderr, "Fatal error: Graph has been corrupted during resize");
+                    free(new_nodes);
+                    return STATUS_ERROR;
+                default:
                     free(new_nodes);
                     return STATUS_ERROR;
             }
+            current = next;
         }
     }
     
@@ -46,7 +56,7 @@ Status graph_resize (Graph* graph) {
     if (!new_id_array) {
         fprintf(stderr, "Error: Failed to rezize graph, keeping previous capacity\n");
         free(new_nodes);
-        return STATUS_ERROR;
+        return STATUS_OOM;
     }
     
     free(graph->nodes);
@@ -75,7 +85,7 @@ Node* create_node(int node_id, size_t neighbor_capacity) {
     // Allocate memory for new node
     Node* new_node = malloc(sizeof(Node));
     if (!new_node) {
-        fprintf(stderr, "Error: Failed to initialize new node, keeping previous capacity\n");
+        fprintf(stderr, "Error: Failed to initialize new node\n");
         return NULL;
     }
     
@@ -102,16 +112,13 @@ Node* create_node(int node_id, size_t neighbor_capacity) {
 }
 
 Status node_resize(Node* node) {
-    if (!node) {
-        fprintf(stderr, "Fatal error: Node is corrupted\n");
-        return STATUS_ERROR;
-    }
+    CHECK_NODE
 
     size_t new_capacity = node->neighbor_capacity * 2;
     EdgeNode* new_neighbors = realloc(node->neighbors, new_capacity * sizeof(EdgeNode));
     if (!new_neighbors) {
         fprintf(stderr, "Error: Failed to resize node\n");
-        return STATUS_WARNING;
+        return STATUS_OOM;
     }
 
     // Initialize new neighbors with sentinel values
@@ -126,10 +133,7 @@ Status node_resize(Node* node) {
 }
 
 Status node_add_edge(Node* node, int to, double weight, double* old_weight, bool update) {
-    if (!node) {
-        fprintf(stderr, "Fatal error: Node is corrupted\n");
-        return STATUS_ERROR;
-    }
+    CHECK_NODE
 
     // Check if edge already exists
     if (update) {
@@ -139,8 +143,10 @@ Status node_add_edge(Node* node, int to, double weight, double* old_weight, bool
                 node->neighbors[i].weight = weight;
                 return STATUS_SUCCESS;
             }
-        }      
-
+        }
+        
+        fprintf(stderr, "Error: Edge from node %d to node %d does not exist\n", node->id, to);
+        return STATUS_WARNING;
     } else {
         // Check if edge already exists
         for (size_t i = 0; i < node->neighbor_count; i++) {
@@ -156,9 +162,12 @@ Status node_add_edge(Node* node, int to, double weight, double* old_weight, bool
         switch (node_resize(node)) {
             case STATUS_SUCCESS:
             break;
-            case STATUS_WARNING:
-                return STATUS_WARNING;
-            case STATUS_ERROR:
+            case STATUS_OOM:
+                fprintf(stderr, "Error: Failed to resize node %d, keeping previous version\n", node->id);
+                return STATUS_OOM;
+            default:
+                // should never happen
+                fprintf(stderr, "Fatal error: Node %d has been corrupted during resize\n", node->id);
                 return STATUS_ERROR;
         }
     }
@@ -173,10 +182,7 @@ Status node_add_edge(Node* node, int to, double weight, double* old_weight, bool
 }
 
 Status node_remove_edge(Node* node, int to, double* old_weight) {
-    if (!node) {
-        fprintf(stderr, "Fatal error: Node is corrupted\n");
-        return STATUS_ERROR;
-    }
+    CHECK_NODE
 
     for (size_t i = 0; i < node->neighbor_count; i++) {
         if (node->neighbors[i].node_id == to) {
@@ -198,6 +204,8 @@ Status node_remove_edge(Node* node, int to, double* old_weight) {
         }
     }
 
+    #ifdef DEBUG
     fprintf(stderr, "Error: Edge from node %d to node %d does not exist\n", node->id, to);
+    #endif
     return STATUS_WARNING;
 }

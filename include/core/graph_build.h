@@ -45,12 +45,12 @@ Graph* graph_create(GraphType type, size_t initial_capacity);
 void graph_destroy(Graph* graph);
 
 // Edit graph tools
-bool graph_insert_node(Graph* graph, int node_id, size_t initial_capacity);
-bool graph_remove_node(Graph* graph, int node_id);
+Status graph_insert_node(Graph* graph, int node_id, size_t initial_capacity);
+Status graph_remove_node(Graph* graph, int node_id);
 
-bool graph_insert_edge(Graph* graph, int from, int to, double weight);
-bool graph_update_edge(Graph* graph, int from, int to, double weight);
-bool graph_remove_edge(Graph* graph, int from, int to);
+Status graph_insert_edge(Graph* graph, int from, int to, double weight);
+Status graph_update_edge(Graph* graph, int from, int to, double weight);
+Status graph_remove_edge(Graph* graph, int from, int to);
 
 // Basic properties getters
 size_t graph_node_count(const Graph* graph);

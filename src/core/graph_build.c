@@ -7,12 +7,6 @@
 #include "utils/graph_build_utils.h"
 
 # define INITIAL_CAPACITY 4
-# define CHECK_GRAPH \
-    do {    if (!graph) {\
-        fprintf(stderr, "Fatal error: Graph is corrupted in %s function call\n", __func__);\
-        return STATUS_ERROR;\
-    }\
-} while(0);
 
 // Basic graph operations
 Graph* graph_create(GraphType type, size_t initial_capacity) {
@@ -50,6 +44,7 @@ Graph* graph_create(GraphType type, size_t initial_capacity) {
 }
 
 Status graph_destroy(Graph* graph) {
+    // this graph check is not strictly necessary, but it helps catch bugs and stanarizes the API
     CHECK_GRAPH
 
     for (size_t i = 0; i < graph->node_capacity; i++) {
@@ -86,24 +81,14 @@ Status graph_insert_node(Graph* graph, int node_id, size_t node_capacity) {
         return STATUS_WARNING;
     }
 
-    // Check if nodes arrays needs rezising
-    if (graph_needs_resize(graph)) {
-        switch (graph_resize(graph)) {
-            case STATUS_SUCCESS:
-                break;
-            case STATUS_WARNING:
-                return STATUS_WARNING;
-            case STATUS_ERROR:
-                return STATUS_ERROR;
-        }
-    }
-
     // Initialize new node
     if (node_capacity <= 0) node_capacity = INITIAL_CAPACITY;
     Node* new_node = create_node(node_id, node_capacity);
     if (!new_node) {
         // * create_node function has own error logs
-        return STATUS_WARNING;
+        // fprintf(stderr, "Error: Failed to initialize new node\n"); <- error log if create_node fails
+        fprintf(stderr, "Error: Graph left unchanged, node with ID %d could not be inserted\n", node_id);
+        return STATUS_OOM; // it happens only if malloc fails
     }
 
     switch(add_to_hash_table(new_node, graph->node_capacity, graph->nodes)) {
@@ -114,8 +99,35 @@ Status graph_insert_node(Graph* graph, int node_id, size_t node_capacity) {
             free(new_node->neighbors);
             free(new_node);
             return STATUS_WARNING;
-        case STATUS_ERROR:
+        case STATUS_INVALID:
+            // if node is invalid, assume graph has been corrupted 
+            fprintf(stderr, "Fatal error: Graph has been corrupted\n");
+            free(new_node->neighbors);
+            free(new_node);
             return STATUS_ERROR;
+        default:
+            // should never happen
+            free(new_node->neighbors);
+            free(new_node);
+            return STATUS_ERROR;
+    }
+
+    // Check if nodes arrays needs rezising
+    if (graph_needs_resize(graph)) {
+        switch (graph_resize(graph)) {
+            case STATUS_SUCCESS:
+                break;
+            case STATUS_OOM:
+                // If OOM happens, graph is left unmodified
+                fprintf(stderr, "Error: Failed to resize graph, load factor might be too high\n");
+                return STATUS_OOM;
+            case STATUS_INVALID:
+                // should never happen due to previous check
+                fprintf(stderr, "Fatal error: Graph has been corrupted\n");
+                return STATUS_ERROR;
+            default:
+                return STATUS_ERROR;
+        }
     }
 
     graph->node_ids[graph->node_count] = node_id;
@@ -141,7 +153,8 @@ Status graph_remove_node(Graph* graph, int node_id) {
             EdgeNode edge = node->neighbors[i];
             Node *current = find_node(graph, edge.node_id);  // quite sure this won't return NULL due to edges only point to existing nodes
             if (!current) {
-                fprintf(stderr, "Fatal error: Undirected graph has been corrupted. Edge points to non-existing node %d\n", edge.node_id);
+                fprintf(stderr, "Fatal error: Undirected graph has been corrupted. "
+                    "Edge points to non-existing node %d\n", edge.node_id);
                 return STATUS_ERROR;
             }
             
@@ -153,8 +166,11 @@ Status graph_remove_node(Graph* graph, int node_id) {
                     // if it doesn't, the graph is corrupted.
                     fprintf(stderr, "Warning: Directed edge node %d->%d, while removing node %d\n", edge.node_id, node_id, node_id);
                     fprintf(stderr, "Fatal error: Undirected graph has been corrupted\n");
+                case STATUS_INVALID:
+                    // If node is invalid, assume graph has been corrupted
+                    fprintf(stderr, "Fatal error: Graph has been corrupted\n");
                     return STATUS_ERROR;
-                case STATUS_ERROR:
+                default:
                     return STATUS_ERROR;
             }
         }
@@ -165,10 +181,14 @@ Status graph_remove_node(Graph* graph, int node_id) {
             while (current) {
                 switch (node_remove_edge(current, node_id, NULL)) {
                     case STATUS_SUCCESS:
-                    case STATUS_WARNING:
+                    case STATUS_WARNING:  // Impossible to know if edge exists before checking, so warning is fine
                         current = current->next;
                         break;
-                    case STATUS_ERROR:
+                    case STATUS_INVALID:
+                        // If node is invalid, assume graph has been corrupted
+                        fprintf(stderr, "Fatal error: Graph has been corrupted\n");
+                        return STATUS_ERROR;
+                    default:
                         return STATUS_ERROR;
                 }
             }
@@ -180,11 +200,14 @@ Status graph_remove_node(Graph* graph, int node_id) {
         case STATUS_SUCCESS:
             break;
         case STATUS_WARNING:
-            // should never happen due to previous check, just for completeness
-            // if node removal fails, while the edges have been removed, the graph has been corrupted
+            // If the node removal fails, and the edges have been removed, the graph has been corrupted
             fprintf(stderr, "Fatal error: Graph has been corrupted\n");
             return STATUS_ERROR;
-        case STATUS_ERROR:
+        case STATUS_INVALID:
+            // If node is invalid, assume graph has been corrupted
+            fprintf(stderr, "Fatal error: Graph has been corrupted\n");
+            return STATUS_ERROR;
+        default:
             return STATUS_ERROR;
     }
 
@@ -207,13 +230,13 @@ Status graph_insert_edge(Graph* graph, int from, int to, double weight) {
 
     Node* from_node = find_node(graph, from);
     if (!from_node) {
-        fprintf(stderr, "Warning: A node with ID %d does not exist in the graph", from);
+        fprintf(stderr, "Warning: A node with ID %d does not exist in the graph\n", from);
         return STATUS_WARNING;
     }
 
     Node* to_node = find_node(graph, to);
     if (!to_node) {
-        fprintf(stderr, "Warning: A node with ID %d does not exist in the graph", to);
+        fprintf(stderr, "Warning: A node with ID %d does not exist in the graph\n", to);
         return STATUS_WARNING;
     }
 
@@ -221,56 +244,55 @@ Status graph_insert_edge(Graph* graph, int from, int to, double weight) {
         case STATUS_SUCCESS:
             break;
         case STATUS_WARNING:
-            // will throw warning if edge already exists or if resizing fails
+            // will throw warning if edge already exists
             return STATUS_WARNING;
+        case STATUS_OOM:
+            // If OOM happens, graph is left unmodified
+            fprintf(stderr, "Error: Failed to add edge %d->%d\n", from, to);
+            return STATUS_OOM;
+        case STATUS_INVALID:
+            // If node is invalid, assume graph has been corrupted
+            fprintf(stderr, "Fatal error: Graph has been corrupted\n");
+            return STATUS_ERROR;
         case STATUS_ERROR:
             return STATUS_ERROR;
     }
-    
-    // For undirected graphs, add reverse edge
-    if (graph->type == GRAPH_UNDIRECTED) {
-        switch (node_add_edge(to_node, from, weight, NULL, false)) {
-            case STATUS_SUCCESS:
-                return STATUS_SUCCESS;
-            case STATUS_WARNING:
-            case STATUS_ERROR:
-                break;
-        }
 
-        // Undo addition of forward edge
-        switch (node_remove_edge(from_node, to, NULL)) {
-            case STATUS_SUCCESS:
-                break;
-            case STATUS_WARNING:
-            case STATUS_ERROR:
+    if (graph->type == GRAPH_UNDIRECTED) {
+        // For undirected graphs, add reverse edge
+        if (node_add_edge(to_node, from, weight, NULL, false) != STATUS_SUCCESS) {
+            // If adding reverse edge fails, undo addition of forward edge
+            if (node_remove_edge(from_node, to, NULL) != STATUS_SUCCESS) {
+                // If rollback of forward edge fails, graph is corrupted
                 fprintf(stderr,
                     "Fatal error: Undirected graph has been corrupted. " 
                     "rollback failed to revert forward edge %d->%d\n", from, to);
                 return STATUS_ERROR;
+            }
 
+            fprintf(stderr, "Error: Failed to add edge between nodes %d and %d"
+                "graph left unmodified\n", from, to);
+            return STATUS_WARNING;
         }
-    } else {
-        return STATUS_SUCCESS;
     }
-
-    fprintf(stderr, "Error: Failed to add edge between nodes %d and %d\n", from, to);
-    return STATUS_WARNING;
+    
+    return STATUS_SUCCESS;
 }
 
-
-// TODO: implement Status instead of bool
 Status graph_update_edge(Graph* graph, int from, int to, double weight){
     CHECK_GRAPH
 
     Node* from_node = find_node(graph, from);
     if (!from_node) {
-        fprintf(stderr, "Warning: A node with ID %d does not exist in the graph", from);
+        fprintf(stderr, "Warning: A node with ID %d does not exist in the graph"
+            "graph left unmodified\n", from);
         return STATUS_WARNING;
     }
 
     Node* to_node = find_node(graph, to);
     if (!to_node) {
-        fprintf(stderr, "Warning: A node with ID %d does not exist in the graph", to);
+        fprintf(stderr, "Warning: A node with ID %d does not exist in the graph, "
+            "graph left unmodified\n", to);
         return STATUS_WARNING;
     }
 
@@ -279,39 +301,37 @@ Status graph_update_edge(Graph* graph, int from, int to, double weight){
             break;
         case STATUS_WARNING:
             // will throw warning if edge does not exist
+            fprintf(stderr, "Error: Failed to edit edge %d->%d, graph left unmodified\n", from, to);
             return STATUS_WARNING;
+        case STATUS_OOM:
+            fprintf(stderr, "Error: Failed to edit edge %d->%d, graph left unmodified\n", from, to);
+            return STATUS_OOM;
+        case STATUS_INVALID:
+            // If node is invalid, assume graph has been corrupted
+            fprintf(stderr, "Fatal error: Graph has been corrupted\n");
+            return STATUS_ERROR;
         case STATUS_ERROR:
             return STATUS_ERROR;
     }
-
-    // For undirected graphs, edit reverse edge
     if (graph->type == GRAPH_UNDIRECTED) {
+        // For undirected graphs, edit reverse edge
         double old_weight = 0.0;
-        switch (node_add_edge(to_node, from, weight, &old_weight, true)) {
-            case STATUS_SUCCESS:
-                return STATUS_SUCCESS;
-            case STATUS_WARNING:
-            case STATUS_ERROR:
-                break;
-        }
-
-        // Undo changes to forward edge
-        switch (node_add_edge(from_node, to, old_weight, NULL, true)) {
-            case STATUS_SUCCESS:
-                break;
-            case STATUS_WARNING:
-            case STATUS_ERROR:
+        if (node_add_edge(to_node, from, weight, &old_weight, true) != STATUS_SUCCESS) {
+            // If adding reverse edge fails, Undo changes to forward edge
+            if (node_add_edge(from_node, to, old_weight, NULL, true) != STATUS_SUCCESS) {
+                // If rollback of forward edge fails, graph is corrupted
                 fprintf(stderr,
                     "Fatal error: Undirected graph has been corrupted. " 
                     "rollback failed to revert forward edge %d->%d\n", from, to);
                 return STATUS_ERROR;
+            }
+
+            fprintf(stderr, "Error: Failed to edit edge between nodes %d and %d, graph left unmodified\n", from, to);
+            return STATUS_WARNING; 
         }
-    } else {
-        return STATUS_SUCCESS;
     }
 
-    fprintf(stderr, "Error: Failed to edit edge between nodes %d and %d\n", from, to);
-    return STATUS_WARNING;       
+    return STATUS_SUCCESS;
 }
 
 Status graph_remove_edge(Graph* graph, int from, int to) {
@@ -320,13 +340,13 @@ Status graph_remove_edge(Graph* graph, int from, int to) {
     Node* from_node = find_node(graph, from);
     if (!from_node) {
         fprintf(stderr, "Warning: A node with ID %d does not exist in the graph", from);
-        return false;
+        return STATUS_WARNING;
     }
 
     Node* to_node = find_node(graph, to);
     if (!to_node) {
         fprintf(stderr, "Warning: A node with ID %d does not exist in the graph", to);
-        return false;
+        return STATUS_WARNING;
     }
 
     switch (node_remove_edge(from_node, to, NULL)) {
@@ -334,39 +354,36 @@ Status graph_remove_edge(Graph* graph, int from, int to) {
             break;
         case STATUS_WARNING:
             // will throw warning if edge does not exist
+            fprintf(stderr, "Error: Failed to edit edge %d->%d, graph left unmodified\n", from, to);
             return STATUS_WARNING;
+        case STATUS_OOM:
+            fprintf(stderr, "Error: Failed to edit edge %d->%d, graph left unmodified\n", from, to);
+            return STATUS_OOM;
+        case STATUS_INVALID:
+            // If node is invalid, assume graph has been corrupted
+            fprintf(stderr, "Fatal error: Graph has been corrupted\n");
+            return STATUS_ERROR;
         case STATUS_ERROR:
             return STATUS_ERROR;
     }
 
-    // For undirected graphs, edit reverse edge
     if (graph->type == GRAPH_UNDIRECTED) {
+        // For undirected graphs, edit reverse edge
         double old_weight = 0.0;
-        switch (node_remove_edge(to_node, from, &old_weight)) {
-            case STATUS_SUCCESS:
-                return STATUS_SUCCESS;
-            case STATUS_WARNING:
-            case STATUS_ERROR:
-                break;
-
-        }
-
-        // Undo removal of forward edge
-        switch (node_add_edge(from_node, to, old_weight, NULL, true)) {
-            case STATUS_SUCCESS:
-                break;
-            case STATUS_WARNING:
-            case STATUS_ERROR:
+        if (node_remove_edge(to_node, from, &old_weight) != STATUS_SUCCESS) {
+            // If adding reverse edge fails, Undo changes to forward edge
+            if (node_add_edge(from_node, to, old_weight, NULL, true) != STATUS_SUCCESS) {
+                // If rollback of forward edge fails, graph is corrupted
                 fprintf(stderr, 
                     "Fatal error: Undirected graph has been corrupted. "
                     "rollback failed to restore forward edge %d->%d\n", from, to);
-                return STATUS_ERROR;
+                    return STATUS_ERROR;
+            }
+
+            fprintf(stderr, "Error: Failed to remove edge between nodes %d and %d, graph left unmodified\n", from, to);
+            return STATUS_WARNING;
         }
-    } else {
-        return STATUS_SUCCESS;
     }
 
-
-    fprintf(stderr, "Failed to remove edge between nodes %d and %d\n", from, to);
-    return false;
+    return STATUS_SUCCESS;
 }

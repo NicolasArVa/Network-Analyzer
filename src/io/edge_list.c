@@ -56,8 +56,16 @@ void get_file_name(int argc, char *argv[], char* buffer, size_t size) {
     }
 }
 
-static int addNode(Graph* graph, int node_id, size_t node_capacity) {
+static Status addNode(Graph* graph, int node_id, size_t node_capacity) {
     if (!find_node(graph, node_id)) {
+        switch (graph_insert_node(graph, node_id, node_capacity)) {
+            case STATUS_SUCCESS:
+            case STATUS_WARNING:
+                return 0;
+            case STATUS_ERROR:
+                return 1;
+
+        }
         bool success = graph_insert_node(graph, node_id, node_capacity);
         if (!success) return 1;
     }
@@ -65,7 +73,7 @@ static int addNode(Graph* graph, int node_id, size_t node_capacity) {
     return 0;
 }
 
-static int addEdge(Graph* graph, int source, int target, double weight) {
+static Status addEdge(Graph* graph, int source, int target, double weight) {
     bool success = graph_insert_edge(graph, source, target, weight);
     if (!success) return 1;
 

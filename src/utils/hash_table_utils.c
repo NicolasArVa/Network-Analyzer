@@ -6,7 +6,12 @@
 #include "utils/hash_table_utils.h"
 #include "utils/graph_build_utils.h"
 
-// TODO: add validation latter
+# define CHECK_TABLE \
+    do {    if (!table) {\
+        fprintf(stderr, "Error: Invalid hash table passed to %s function call\n", __func__);\
+        return STATUS_ERROR;\
+    }\
+} while(0);
 
 unsigned int hash(int id, int table_size) { 
     unsigned int x = (unsigned int)id;
@@ -20,16 +25,16 @@ unsigned int hash(int id, int table_size) {
     return x % table_size;
 }
  //Helper: detect if node is in a bucket froma a hash table
-static Status exists_in_bucket(int id, Node* bucket) {
-    if (!bucket) return STATUS_WARNING;
+static bool exists_in_bucket(int id, Node* bucket) {
+    if (!bucket) return false;
     Node *current = bucket;
 
     while (current) {
-        if (current->id == id) return STATUS_SUCCESS;
+        if (current->id == id) return true;
         current = current->next;
     }
 
-    return STATUS_WARNING;
+    return false;
 }
 
 Node* pop_bucket(Node** bucket) {
@@ -42,13 +47,10 @@ Node* pop_bucket(Node** bucket) {
 }
 
 Status add_to_hash_table(Node* node, size_t table_size, Node** table) {
-    if (!table) {
-        fprintf(stderr, "Fatal error: Hash table is corrupted\n");
-        return STATUS_ERROR;
-    }
+    CHECK_TABLE
     if (!node) {
-        fprintf(stderr, "Fatal error: Trying to add NULL node to hash table\n");
-        return STATUS_ERROR;
+        fprintf(stderr, "Error: Trying to add NULL node to hash table\n");
+        return STATUS_INVALID;
     }
 
     // get the assigned bucket
@@ -56,32 +58,23 @@ Status add_to_hash_table(Node* node, size_t table_size, Node** table) {
     Node *head = table[index];
 
     // Check if node already exists
-    switch (exists_in_bucket(node->id, head)) {
-        case STATUS_SUCCESS:
+    if (exists_in_bucket(node->id, head)) {
             #ifdef DEBUG
             printf("A node with ID %d already exists in the graph\n", node->id);
             #endif
             return STATUS_WARNING; // node already exists
         
-        case STATUS_WARNING:
+    } else {
             // Add node to hash table
             node->next = head;
             table[index] = node;
 
-            return STATUS_SUCCESS; // added succesfully
-        
-        case STATUS_ERROR:
-            // should never happen, just for completeness
-            fprintf(stderr, "Fatal error: Hash table is corrupted\n");
-            return STATUS_ERROR;
+            return STATUS_SUCCESS; 
     }
 }
 
 Status delete_from_hash_table(int id, size_t table_size, Node** table) {
-    if (!table) {
-        fprintf(stderr, "Fatal error: Hash table is corrupted\n");
-        return STATUS_ERROR;
-    }
+    CHECK_TABLE
 
     unsigned int index = hash(id, table_size);
     Node *current = table[index];

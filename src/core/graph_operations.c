@@ -8,7 +8,13 @@
 // TODO: change bool to -1, 0, 1
 
 
-errBool graph_is_directed(const Graph* graph);
+bool graph_is_directed(const Graph* graph) {
+    // If the graph is already tagged as directed or undirected, return that
+    if (graph->type == GRAPH_DIRECTED) return true;
+    if (graph->type == GRAPH_UNDIRECTED) return false;
+
+    // Fallback: check edges to determine if directed
+}
 
 size_t graph_node_count(const Graph* graph) {
     if (!graph) return 0;

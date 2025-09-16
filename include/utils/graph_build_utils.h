@@ -8,7 +8,12 @@
 #include "utils/general_utils.h"
 #include "core/graph_build.h"
 
-// TODO: change bool to -1, 0, 1
+# define CHECK_GRAPH \
+    do {    if (!graph) {\
+        fprintf(stderr, "Error: Invalid graph passed to %s function call\n", __func__);\
+        return STATUS_INVALID;\
+    }\
+} while(0);
 
 
 // Helpers: resize detection
